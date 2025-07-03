@@ -90,3 +90,9 @@ var = await self.network.get("sequencer", "driver", proc_driver)
 **See /basic_test folder for a simple implementation**<br>
 compare with this with https://github.com/pyuvm/pyuvm/blob/master/examples/TinyALU/testbench.py. 
 Do you think uvm_network simplifies pyuvm test bench ? 
+
+**Things to do**
+* Make it thread safe (use semaphores??)
+* create python package 
+* more complicated example 
+* unitests
