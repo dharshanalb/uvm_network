@@ -6,6 +6,15 @@
 uvm_network simplifies connecting various uvm components such as drivers,
 monitors, scoborads etc... 
 
+### Installation
+```
+git clone https://github.com/dharshanalb/uvm_network.git
+pip install -r requirements.txt
+cd basic_test/
+make #this will run the basic test
+
+```
+
 ### Step 1
 in your uvm envrionment/agents's build phase instantiate the uvm_network
 then Put this network into a configDB so this is globally accesible  
