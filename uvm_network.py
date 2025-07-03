@@ -27,13 +27,13 @@ class uvm_network(uvm_component):
         self.flush_db     = []
 
         ##########################        
-        self.err_msg_path_does_not_exist = "[ERR-1] path does not exist in this network"
-        self.err_msg_path_duplication    = "[ERR-2] path already exists, path name should be unique"
-        self.err_msg_no_paths_with_source= "[ERR-3] there are no paths with this source"
-        self.err_msg_no_paths_with_sink  = "[ERR-4] there are no paths with this sink"
-        self.err_msg_no_available_paths  = "[ERR-5] There are no available paths"
-        self.err_msg_invalid_ack_status  = "[ERR-6] invalid ack status"
-        self.err_msg_invalid_ack_process = "[ERR-7] invalid/null ack processing function"
+        self.err_msg_path_does_not_exist        = "[ERR-1] path does not exist in this network"
+        self.err_msg_path_duplication           = "[ERR-2] path already exists, path name should be unique"
+        self.err_msg_no_paths_with_source       = "[ERR-3] there are no paths with this source"
+        self.err_msg_no_paths_with_destination  = "[ERR-4] there are no paths with this destination"
+        self.err_msg_no_available_paths         = "[ERR-5] There are no available paths"
+        self.err_msg_invalid_ack_status         = "[ERR-6] invalid ack status"
+        self.err_msg_invalid_ack_process        = "[ERR-7] invalid/null ack processing function"
 
     @validate_parameters
     def log_error(
@@ -52,28 +52,28 @@ class uvm_network(uvm_component):
     @validate_parameters
     def set_path(
         self, 
-        source:non_blank(str), # type: ignore
-        sink  :non_blank(str)  # type: ignore
+        source       :non_blank(str), # type: ignore
+        destination  :non_blank(str)  # type: ignore
     ) -> tuple: 
         """
-            return a tuple made from source & sink
+            return a tuple made from source & destination
         """
-        path = (source, sink)
+        path = (source, destination)
 
         return path
 
     @validate_parameters
     def valid_path(
         self,
-        source :non_blank(str),              # type: ignore
-        sink   :non_blank(str),              # type: ignore
-        err_en :strongly_typed(bool) = True  # type: ignore
+        source      :non_blank(str),              # type: ignore
+        destination :non_blank(str),              # type: ignore
+        err_en      :strongly_typed(bool) = True  # type: ignore
     ) -> bool:
         """
             check if the path tuple is already in self.path_list.
             uvm error can be enabled/disabled optionally
         """
-        path          = self.set_path(source, sink)
+        path          = self.set_path(source, destination)
         path_list_tmp = self.get_path_list()
                 
         if path in path_list_tmp:
@@ -86,16 +86,16 @@ class uvm_network(uvm_component):
     @validate_parameters
     def add_path(
         self, 
-        source :non_blank(str), # type: ignore
-        sink   :non_blank(str), # type: ignore
+        source      :non_blank(str), # type: ignore
+        destination :non_blank(str), # type: ignore
     )-> bool:
         """
             add a new path to the network
         """        
-        path   = self.set_path(source, sink)
+        path   = self.set_path(source, destination)
         
         #path is not already setup, so ok to add to the network
-        if not(self.valid_path(source, sink, err_en=False)):
+        if not(self.valid_path(source, destination, err_en=False)):
             self.path_list.append(path)
             self.queue_dict[path] = Queue(maxsize = 0) #always infinite queue
             self.ack_db.setdefault(path,{}) #init ack db
@@ -132,23 +132,23 @@ class uvm_network(uvm_component):
         return path_list_res
 
     @validate_parameters
-    def get_paths_from_sink(
+    def get_paths_from_destination(
         self, 
-        sink :non_blank(str), # type: ignore
+        destination :non_blank(str), # type: ignore
     ) -> list[tuple]:
         """
-            get all the paths which have the same sink
+            get all the paths which have the same destination
         """
         path_list_tmp = self.get_path_list()
         path_list_res = []
 
         for path in path_list_tmp:
-            (_, cmp_sink) = path
-            if cmp_sink == sink:
+            (_, cmp_destination) = path
+            if cmp_destination == destination:
                 path_list_res.append(path)
         
         if len(path_list_res) == 0:
-            self.log_error(self.get_paths_from_sink.__name__, self.err_msg_no_paths_with_sink, locals())
+            self.log_error(self.get_paths_from_destination.__name__, self.err_msg_no_paths_with_destination, locals())
 
         return path_list_res
 
@@ -161,9 +161,9 @@ class uvm_network(uvm_component):
     @validate_parameters
     async def put(
         self,
-        source : non_blank(str),        # type: ignore
-        sink   : non_blank(str),        # type: ignore
-        mode   : strongly_typed(TxMode),# type: ignore       
+        source      : non_blank(str),        # type: ignore
+        destination : non_blank(str),        # type: ignore
+        mode        : strongly_typed(TxMode),# type: ignore       
         data,                           # very weak type!        
     ) -> uvm_packet:
         """
@@ -172,15 +172,15 @@ class uvm_network(uvm_component):
         req_pkt = uvm_packet("req_pkt")
 
         #setup the path tuple
-        path = self.set_path(source, sink)
+        path = self.set_path(source, destination)
 
         #check if path is already setup
-        if self.valid_path(source, sink):
+        if self.valid_path(source, destination):
             #create the req packet
             req_pkt.set_all(
                 source,
-                sink, 
-                self.qsize(source, sink)+1, 
+                destination, 
+                self.qsize(source, destination)+1, 
                 TxState.IDLE, 
                 mode, 
                 data, 
@@ -208,29 +208,29 @@ class uvm_network(uvm_component):
     @validate_parameters
     async def put_noack(
         self, 
-        source : non_blank(str),        # type: ignore
-        sink   : non_blank(str),        # type: ignore
+        source      : non_blank(str),        # type: ignore
+        destination : non_blank(str),        # type: ignore
         data,                           # very weak type!
     ) -> bool:
         """
         perform a put where no ack is required
         """
-        pkt = await self.put(source, sink, TxMode.NOACK, data)
+        pkt = await self.put(source, destination, TxMode.NOACK, data)
 
         return pkt.is_state_done()
 
     @validate_parameters
     async def put_ack(
         self, 
-        source : non_blank(str),              # type: ignore
-        sink   : non_blank(str),              # type: ignore
+        source      : non_blank(str),              # type: ignore
+        destination : non_blank(str),              # type: ignore
         data,                                 # very weak type!
         err_en : strongly_typed(bool)= True   # type: ignore
     ) -> bool:
         """
         perform a put where ack is required
         """
-        pkt = await self.put(source, sink, TxMode.ACK, data)
+        pkt = await self.put(source, destination, TxMode.ACK, data)
 
         if pkt.is_state_done():
             return True
@@ -243,14 +243,14 @@ class uvm_network(uvm_component):
     async def put_ack_data(
         self, 
         source : non_blank(str),            # type: ignore
-        sink   : non_blank(str),            # type: ignore
+        destination   : non_blank(str),            # type: ignore
         data,                               # very weak type!
         err_en : strongly_typed(bool)= True # type: ignore
     ) -> uvm_object:
         """
         perform a put with data is required, and data is returned back
         """
-        pkt      = await self.put(source, sink, data, TxMode.ACK_WITH_DATA)
+        pkt      = await self.put(source, destination, data, TxMode.ACK_WITH_DATA)
 
         if pkt.is_state_done():
             return pkt.get_ack_obj()
@@ -264,8 +264,8 @@ class uvm_network(uvm_component):
     @validate_parameters
     async def get(
         self, 
-        source : non_blank(str), # type: ignore
-        sink   : non_blank(str), # type: ignore
+        source      : non_blank(str), # type: ignore
+        destination : non_blank(str), # type: ignore
         proc_func = None,        # a function here
         *arg,                    # very weak type!
         **kwargs                 # very weak type!
@@ -275,10 +275,10 @@ class uvm_network(uvm_component):
             output => req_object
         """                   
         #setup the path tuple 
-        path    = self.set_path(source, sink)
+        path    = self.set_path(source, destination)
         
         #check if the path is already setup 
-        if self.valid_path(source, sink):
+        if self.valid_path(source, destination):
             #pull in the uvm packet
             req_pkt = await self.queue_dict[path].get()
             req_obj = req_pkt.get_req_obj() 
@@ -303,7 +303,7 @@ class uvm_network(uvm_component):
         data                     # very weak type!
     ) -> bool:
         """
-            broadcast the data to all the sinks connected the source, paths set to noack
+            broadcast the data to all the destinations connected the source, paths set to noack
         """
         path_list_tmp = self.get_paths_from_source(source)
         task_list = []
@@ -314,8 +314,8 @@ class uvm_network(uvm_component):
         #put concurrently
         
         for path in path_list_tmp:  
-            (source, sink) = path          
-            put_task = cocotb.start_soon(self.put_noack(source, sink, data))
+            (source, destination) = path          
+            put_task = cocotb.start_soon(self.put_noack(source, destination, data))
             task_list.append(put_task) 
         
         global_status = True 
@@ -332,7 +332,7 @@ class uvm_network(uvm_component):
         data                     # very weak type!    
     ) -> bool:
         """
-            broadcast the data to all the sinks connected the source, paths set to ack
+            broadcast the data to all the destinations connected the source, paths set to ack
         """
         path_list_tmp = self.get_paths_from_source(source)
         task_list = []
@@ -341,8 +341,8 @@ class uvm_network(uvm_component):
             return False
 
         for path in path_list_tmp:
-            (source, sink) = path
-            put_task       = cocotb.start_soon(self.put_ack(source, sink, data))
+            (source, destination) = path
+            put_task       = cocotb.start_soon(self.put_ack(source, destination, data))
             task_list.append(put_task) 
 
         global_status = True 
@@ -358,10 +358,10 @@ class uvm_network(uvm_component):
         source : non_blank(str), # type: ignore
         data                     # very weak type!
     ) -> list[(str,uvm_object)]:
-        """broadcast the data to all the sinks connected the source, paths set to ack with data
+        """broadcast the data to all the destinations connected the source, paths set to ack with data
 
         Returns:
-            list of tuple, each tuple will contain the name of the sink that sent the ack data and the ack data
+            list of tuple, each tuple will contain the name of the destination that sent the ack data and the ack data
         """
         
         path_list_tmp = self.get_paths_from_source(source)
@@ -371,31 +371,31 @@ class uvm_network(uvm_component):
         if len(path_list_tmp) <= 0:
             return False
         
-        #start sending to all the sinks concurrenlty
+        #start sending to all the destinations concurrenlty
         for path in path_list_tmp:
-            (source, sink) = path
-            put_task       = cocotb.start_soon(self.put_ack_data(source, sink, data))
+            (source, destination) = path
+            put_task       = cocotb.start_soon(self.put_ack_data(source, destination, data))
             task_list.append(put_task) 
 
-        #wait for ack and return a list of tuples (sink_name, ack_object)
+        #wait for ack and return a list of tuples (destination_name, ack_object)
         for task in task_list:
             ack_pkt = await task 
-            data_list.append((self.get_sink(ack_pkt.get_path()), ack_pkt.get_ack_obj()))
+            data_list.append((self.get_destination(ack_pkt.get_path()), ack_pkt.get_ack_obj()))
 
         return data_list
 
     @validate_parameters    
     def empty(
         self, 
-        source : non_blank(str), # type: ignore
-        sink   : non_blank(str), # type: ignore
+        source      : non_blank(str), # type: ignore
+        destination : non_blank(str), # type: ignore
     ) -> bool:
         """
             check if network path is empty
         """
-        path = self.set_path(source, sink)
+        path = self.set_path(source, destination)
 
-        if self.valid_path(source, sink):
+        if self.valid_path(source, destination):
             return self.queue_dict[path].empty()
         else:
             return None
@@ -403,15 +403,15 @@ class uvm_network(uvm_component):
     @validate_parameters
     def qsize(
         self, 
-        source : non_blank(str), # type: ignore
-        sink   : non_blank(str), # type: ignore
+        source      : non_blank(str), # type: ignore
+        destination : non_blank(str), # type: ignore
     ) -> int:
         """
             get the qsize of network path
         """
-        path  = self.set_path(source, sink)
+        path  = self.set_path(source, destination)
         
-        if self.valid_path(source, sink):
+        if self.valid_path(source, destination):
             return self.queue_dict[path].qsize()
         else:
             return None
